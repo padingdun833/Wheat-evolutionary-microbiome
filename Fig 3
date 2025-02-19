@@ -1,0 +1,161 @@
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\enrich_analysis")
+df_count <- read.delim("unigenes.count",row.names = 1)
+colnames(df_count) <- sub(".quant","",colnames(df_count))
+colnames(df_count) <- sub("Z","D",colnames(df_count))
+colnames(df_count)
+counts <- df_count[,7:30]##不包含SQ
+
+a <- NULL
+b <- NULL
+d <- NULL
+list <- list(smtA_gene,acs_gene,korA_gene,accA_gene,aclB_gene,
+             pccA_gene,frdA_gene,mct_gene,rbcL_gene,ascA_gene,ascE_gene)
+for (i in list) {
+  # print(i[,1,drop = T])
+  # i <- as.data.frame(i)
+  a <- counts[rownames(counts) %in% i[,1,drop = T],]
+  b <- apply(a, 2, sum)
+  d <- rbind(d,b)
+}
+rownames(d) <- c("smtA_gene","acsB_gene","korA_gene","accA_gene","aclB_gene",
+                 "pccA_gene","frdA_gene","mct_gene","rbcL_gene","ascA_gene","ascE_gene")
+df_C <- as.data.frame(d)
+
+a <- NULL
+b <- NULL
+d <- NULL
+list <- list(amoA_gene,hao_gene,nosZ_gene,amoB_gene,narG_gene,nirS_gene,
+             nirk_gene,napA_gene,nasA_gene,ureC_gene,gdhA_gene,nifH_gene,hdh_gene)
+for (i in list) {
+  # print(i[,1,drop = T])
+  # i <- as.data.frame(i)
+  a <- counts[rownames(counts) %in% i[,1,drop = T],]
+  b <- apply(a, 2, sum)
+  d <- rbind(d,b)
+}
+rownames(d) <- c("amoA_gene","hao_gene","nosZ_gene","amoB_gene","narG_gene","nirS_gene",
+                 "nirk_gene","napA_gene","nasA_gene","ureC_gene","gdhA_gene","nifH_gene","hdh_gene")
+df_N <- as.data.frame(d)
+
+
+a <- NULL
+b <- NULL
+d <- NULL
+list <- list(amyA_gene,sga_gene,abfA_gene,manB_gene,xylA_gene,naglu_gene,chiA_gene)
+for (i in list) {
+  # print(i[,1,drop = T])
+  # i <- as.data.frame(i)
+  a <- counts[rownames(counts) %in% i[,1,drop = T],]
+  b <- apply(a, 2, sum)
+  d <- rbind(d,b)
+}
+rownames(d) <- c("amyA","sga","abfA","manB","xylA","naglu","chiA")
+df_c_hydrolysis <- as.data.frame(d)
+
+
+###P
+a <- NULL
+b <- NULL
+d <- NULL
+list <- list(pqqC_gene,phoD_gene,ppk_gene,ppx_gene,phnk_gene,gcd_gene,appA_gene)
+for (i in list) {
+  # print(i[,1,drop = T])
+  # i <- as.data.frame(i)
+  a <- counts[rownames(counts) %in% i[,1,drop = T],]
+  b <- apply(a, 2, sum)
+  d <- rbind(d,b)
+}
+rownames(d) <- c("pqqC_gene","phoD_gene","ppk_gene","ppx_gene","phnk_gene","gcd_gene","appA_gene")
+df_p <- as.data.frame(d)
+
+
+###S
+a <- NULL
+b <- NULL
+d <- NULL
+list <- list(soxY_gene,dsrB_gene,dsrA_gene,cysNC_gene,papss_gene,cysH_gene)
+for (i in list) {
+  # print(i[,1,drop = T])
+  # i <- as.data.frame(i)
+  a <- counts[rownames(counts) %in% i[,1,drop = T],]
+  b <- apply(a, 2, sum)
+  d <- rbind(d,b)
+}
+rownames(d) <- c("soxY_gene","dsrB_gene","dsrA_gene","cysNC_gene","papss_gene","cysH_gene")
+df_s <- as.data.frame(d)
+
+##################热图
+df_heat <- rbind(df_C,df_c_hydrolysis,df_N,df_p,df_s)
+df_heat_t <- as.data.frame(t(df_heat[c(1:9,16:24)]))
+df_heat_t$Sample <- rep(c("W1","W2","W3","D1","D2","D3"),each = 3)
+df1 <- aggregate(df_heat_t[-length(df_heat_t)],by = list(df_heat_t$Sample),mean)
+rownames(df1) <- df1$Group.1
+df2 <- as.data.frame(t(df1[-1]))
+match(rownames(df_heat),rownames(df2))
+df_heat2 <- cbind(df2,df_heat[10:15])
+df_heat2 <- df_heat2[c(4:6,1:3,7:12)]
+rownames(df_heat2) <- gsub("_gene","",rownames(df_heat2))
+
+####差异基因检验与标记
+sample <- rep(c("W","D","CS","YH"),each = 3)
+library(edgeR)
+y <- DGEList(counts = df_heat2,group = sample)
+y$samples
+keep <- filterByExpr(y)
+sum(keep)##按要求过滤表达量后剩余基因
+y <- y[keep, , keep.lib.sizes=FALSE]
+# y <- calcNormFactors(y)
+y$samples
+levels(y$samples$group)
+design <- model.matrix(~0+sample, data=y$samples)
+# colnames(design) <- levels(y$samples$group)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+##驯化差异基因
+qlf <- glmQLFTest(fit, contrast = c(0,1,-1,0))
+topTags(qlf)
+tmm <- topTags(qlf,n=NULL)#选取top基因同时进行FDR多重校正
+deg1 <- tmm$table
+deg_domestication <- deg1[deg1$FDR <= 0.05,]
+##多倍化差异基因
+qlf <- glmQLFTest(fit, contrast = c(1,-1,0,0))
+tmm <- topTags(qlf,n=NULL)#选取top基因同时进行FDR多重校正
+deg2 <- tmm$table
+deg_polyploidy <- deg2[deg2$FDR <= 0.05,]
+##改良差异基因
+qlf <- glmQLFTest(fit, contrast = c(-1,0,0,1))
+tmm <- topTags(qlf,n=NULL)#选取top基因同时进行FDR多重校正
+deg3 <- tmm$table
+deg_improvement <- deg3[deg3$FDR <= 0.05,]
+
+df_sig <- as.data.frame(matrix(data = 1:528,ncol = 12))
+rownames(df_sig) <- rownames(df_heat2)
+colnames(df_sig) <- colnames(df_heat2)
+df_sig[df_sig != 0] <- ""
+fun <- function(pval){ifelse(pval>0.1,"",ifelse(pval>0.05,"",
+                                                ifelse(pval>0.01,"*",
+                                                       ifelse(pval>0.001,"**","***"))))}
+df_pval <- merge(deg1[,5,drop = F],deg2[,5,drop = F],by = "row.names")
+colnames(df_pval) <- c("Gene","Domestication","Polyploidization")
+rownames(df_pval) <- df_pval$Gene
+df_pval <- df_pval[-1]
+df_pval2 <- as.data.frame(apply(df_pval, 2, fun))
+df_sig2 <- merge(df_sig,df_pval2,by = "row.names",all.x = T)
+rownames(df_sig2) <- df_sig2$Row.names
+df_sig2 <- df_sig2[c(2:5,14,7,8,15,9,11:13)]
+df_sig2[is.na(df_sig2)] <- ""
+rownames(df_sig2)[match(rownames(df_heat2),rownames(df_sig2))]
+df_sig2 <- df_sig2[match(rownames(df_heat2),rownames(df_sig2)),]
+
+# df_heat2 <- log2(df_heat2+1)
+library(pheatmap)
+pheatmap(df_heat2,
+         cluster_rows = F,cluster_cols = F,
+         scale = "row",
+         color = colorRampPalette(c("navy","white","firebrick3"))(100),
+         gaps_col = c(3,6,9),
+         display_numbers = df_sig2,
+         fontsize_number = 20,
+         show_colnames = F,
+         filename = "KO_heatmap.pdf")
+dev.off()
