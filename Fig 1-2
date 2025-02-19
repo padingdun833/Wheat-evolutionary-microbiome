@@ -365,3 +365,184 @@ p2 <- p1+scale_y_break(c(3100,22500),#截断位置及范围
 p2
 
 ggsave("Core_phylum_fungi.pdf",height = 10,width = 12)
+
+#获取每个cluster中表达差异最显著的10个基因；
+df_top <- data.frame()
+for (i in unique(df_new$Phylum)) {
+  top10 <- filter(df_new,Phylum==i) %>% #distinct(Species,.keep_all = T) %>% 
+    top_n(5,-FDR)
+  df_top <- rbind(df_top,top10)
+}
+#新增一列，将Top10的差异基因标记为2，其他的标记为1；
+df_new$size <- case_when(!(df_new$Species %in% df_top$Species)~ 1,
+                         df_new$Species %in% df_top$Species ~ 2)
+
+#提取非Top10的基因表格；
+dt <- filter(df_new,size==1)
+head(dt)
+df_new$Type <- factor(df_new$Type,levels = unique(df_new$Type))
+#绘制每个Cluster Top10以外基因的散点火山图：
+p <- ggplot()+
+  geom_jitter(data = df_top,
+              aes(x = Phylum, y = -log10(FDR)),
+              color = NA,
+              width =0.4)+
+  annotate("rect",xmin = 0.5, xmax = 1.5,
+           ymin = 1.1, ymax = 11,
+           fill="#F4F4F3")+
+  annotate("rect",xmin = 2.5, xmax = 3.5,
+           ymin = 1.1, ymax = 11,
+           fill="#F4F4F3")+
+  annotate("rect",xmin = 4.5, xmax = 5.5,
+           ymin = 1.1, ymax = 11,
+           fill="#F4F4F3")+
+  annotate("rect",xmin = 6.5, xmax = 7.5,
+           ymin = 1.1, ymax = 11,
+           fill="#F4F4F3")+
+  geom_jitter(data = df_new,
+              aes(x = Phylum, y = -log10(FDR), color = Phylum,shape = Type,size = abs(logFC)),
+              width =0.4)+
+  scale_color_manual(values = brewer.pal(8, "Dark2"))+
+  theme(axis.title.x = element_blank(),
+        axis.line = element_line(linewidth = 1),panel.grid=element_blank(),
+        panel.background = element_rect(fill = 'white'),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5))
+p
+library(RColorBrewer)
+display.brewer.all(n=NULL, type="all", select=NULL, exact.n=TRUE, 
+                   colorblindFriendly=FALSE)
+brewer.pal(8, "Dark2")
+
+a <- c()
+for (i in sort(unique(df_new$Phylum))) {
+  for (j in sort(unique(df_new$Type))) {
+    p <- sum(df_new$logFC[(df_new$Phylum == i & df_new$Type == j)] > 0)
+    n <- sum(df_new$logFC[(df_new$Phylum == i & df_new$Type == j)] < 0)
+    a <- c(a,p,n)
+  }
+}
+a1 <- a
+e <- rep(paste0(rep(sort(unique(df_new$Type)),each = 2),rep(c("Up","Down"),3)),8)
+f <- rep(sort(unique(df_new$Phylum)),each = 6)
+names(a1) <- paste0(f,e)
+#添加X轴的cluster色块标签：
+col<-data.frame(x=c(1:8),
+                  y=0.9,label=c("1;51;12;38;3;0","1;32;3;87;0;0","13;9;5;63;3;2","0;0;0;9;0;0",
+                              "34;121;24;129;2;10","3;0;0;11;0;2","4;0;0;35;0;4","0;0;0;1;0;0"))
+mycol <- brewer.pal(8, "Dark2")
+p2 <- p + geom_tile(data = col,
+                     aes(x=x,y=y),
+                     height=0.4,
+                     color = "black",
+                     fill = mycol,
+                     alpha = 0.6,
+                     show.legend = F)+
+  scale_y_continuous(limits = c(0.7,11))
+p2
+#给每个Cluster差异表达前Top10基因加上标签：
+library(ggrepel)
+p3 <- p2+
+  geom_text_repel(
+    data=df_top,
+    aes(x = Phylum, y = -log10(FDR),label=Species),
+    force = 1.2,
+    arrow = arrow(length = unit(0.008, "npc"),
+                  type = "open", ends = "last"),
+    max.overlaps = 10  )
+p3
+#修改X/Y轴标题和添加cluster数字：
+p4 <- p3+
+  geom_text(data=col,
+            aes(x=x,y=y,label=label),
+            size =4.5,
+            color ="white")+
+  scale_y_continuous(expand = c(0,0))+
+  geom_hline(yintercept=1, linetype=2, color="grey",linewidth = 1)
+p4
+ggsave("enrich_otu_bac.pdf",height = 8,width = 18)
+
+######################Fungi#############
+#获取每个cluster中表达差异最显著的10个基因；
+df_top <- data.frame()
+for (i in unique(df_new$Phylum)) {
+  top10 <- filter(df_new,Phylum==i) %>% #distinct(Species,.keep_all = T) %>% 
+    top_n(5,-FDR)
+  df_top <- rbind(df_top,top10)
+}
+#新增一列，将Top10的差异基因标记为2，其他的标记为1；
+df_new$size <- case_when(!(df_new$Species %in% df_top$Species)~ 1,
+                         df_new$Species %in% df_top$Species ~ 2)
+
+#提取非Top10的基因表格；
+dt <- filter(df_new,size==1)
+head(dt)
+df_new$Type <- factor(df_new$Type,levels = unique(df_new$Type))
+#绘制每个Cluster Top10以外基因的散点火山图：
+p <- ggplot()+
+  geom_jitter(data = df_top,
+              aes(x = Phylum, y = -log10(FDR)),
+              color = NA,
+              width =0.4)+
+  annotate("rect",xmin = 0.5, xmax = 1.5,
+           ymin = -0.3, ymax = 10,
+           fill="#F4F4F3")+
+  geom_jitter(data = df_new,
+              aes(x = Phylum, y = -log10(FDR), color = Phylum,shape = Type,size = abs(logFC)),
+              width =0.4)+
+  scale_color_manual(values = brewer.pal(3, "Dark2"))+
+  theme(axis.title.x = element_blank(),
+        axis.line = element_line(linewidth = 1),panel.grid=element_blank(),
+        panel.background = element_rect(fill = 'white'),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5))
+p
+library(RColorBrewer)
+display.brewer.all(n=NULL, type="all", select=NULL, exact.n=TRUE, 
+                   colorblindFriendly=FALSE)
+brewer.pal(2, "Dark2")
+
+a <- c()
+for (i in sort(unique(df_new$Phylum))) {
+  for (j in sort(unique(df_new$Type))) {
+    p <- sum(df_new$logFC[(df_new$Phylum == i & df_new$Type == j)] > 0)
+    n <- sum(df_new$logFC[(df_new$Phylum == i & df_new$Type == j)] < 0)
+    a <- c(a,p,n)
+  }
+}
+a1 <- a
+e <- rep(paste0(rep(sort(unique(df_new$Type)),each = 2),rep(c("Up","Down"),3)),2)
+f <- rep(sort(unique(df_new$Phylum)),each = 6)
+names(a1) <- paste0(f,e)
+#添加X轴的cluster色块标签：
+col<-data.frame(x=c(1:2),
+                y=-0.3,label=c("40;25;27;38;27;38","7;2;5;4;5;4"))
+mycol <- brewer.pal(3, "Dark2")[1:2]
+p2 <- p + geom_tile(data = col,
+                    aes(x=x,y=y),
+                    height=0.4,
+                    color = "black",
+                    fill = mycol,
+                    alpha = 0.6,
+                    show.legend = F)+
+  scale_y_continuous(limits = c(-0.6,10))
+p2
+#给每个Cluster差异表达前Top10基因加上标签：
+library(ggrepel)
+p3 <- p2+
+  geom_text_repel(
+    data=df_top,
+    aes(x = Phylum, y = -log10(FDR),label=Species),
+    force = 1.2,
+    arrow = arrow(length = unit(0.008, "npc"),
+                  type = "open", ends = "last"),
+    max.overlaps = 10  )
+p3
+#修改X/Y轴标题和添加cluster数字：
+p4 <- p3+
+  geom_text(data=col,
+            aes(x=x,y=y,label=label),
+            size =4.5,
+            color ="white")+
+  scale_y_continuous(expand = c(0,0))+
+  geom_hline(yintercept=1, linetype=2, color="grey",linewidth = 1)
+p4
+ggsave("enrich_otu_fun.pdf",height = 8,width = 6)
