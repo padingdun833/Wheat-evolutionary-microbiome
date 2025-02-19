@@ -1,0 +1,146 @@
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\results\\MW_SCORE")
+
+CS <- read.table("CS_MW-score_result.txt",sep = "\t",header = T)
+YH <- read.table("YH_MW-score_result.txt",sep = "\t",header = T)
+D <- read.table("Z_MW-score_result.txt",sep = "\t",header = T)
+W <- read.table("W_MW-score_result.txt",sep = "\t",header = T)
+df1 <- merge(W,D,by = "Function",all.x = T)
+df2 <- merge(df1,CS,by = "Function",all.x = T)
+df3 <- merge(df2,YH,by = "Function",all.x = T)
+colnames(df3) <- c("Function",paste0(c("MW-score",colnames(CS)[3:6]),
+                                     rep(c("W","D","CS","YH"),each = 5)))
+
+df3[is.na(df3)] <- 0
+df3 <- df3[c(1,2,7,12,17,3:6,8:11,13:16,18:21)]
+rownames(df3) <- df3$Function
+df3 <- df3[-1]
+rownames(df3)[23] <- "O-S-02:Iron oxidation"
+
+library(pheatmap)
+rownames(df3) <- gsub("\\w\\-\\w\\-\\d\\d:","",rownames(df3))
+pheatmap(df3[1:4],
+         cluster_rows = F,
+         cluster_cols = F,
+         display_numbers = T,
+         cellwidth = 25, cellheight = 15, fontsize = 8,
+         color = colorRampPalette(c("#3574B1", "white", "#e74a32"))(100))
+annotation_col = data.frame(Accession = 
+                              factor(rep(c("W","D","CS","YH"),each = 4),
+                                     levels = c("W","D","CS","YH")))
+rownames(annotation_col) <- colnames(df3[5:20])
+pheatmap(df3[5:20],
+         cluster_rows = F,
+         cluster_cols = F,
+         display_numbers = T,
+         annotation_col = annotation_col,
+         cellwidth = 25, cellheight = 15, fontsize = 8)
+
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\results\\MW_SCORE")
+df <- read.table("MW-score_result_all.txt",sep = "\t",header = T,row.names = 1)
+sum(df$MW.score.for.each.function)
+rownames(df) <- gsub("\\w\\-\\w\\-\\d\\d:","",rownames(df))
+pheatmap(df[,1],
+         cluster_rows = F,
+         cluster_cols = F,
+         display_numbers = T,
+         cellwidth = 25, cellheight = 15, fontsize = 8,
+         color = colorRampPalette(c("#3574B1", "white", "#e74a32"))(100))
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\unigene_bins_nmds")
+##organic
+df_cs <- read.table("CS_Sequential_Transformation_input_2.txt",sep = "\t")
+colnames(df_cs) <- paste0("HCS",c("Function","Number","Coverage"))
+df_yh <- read.table("YH_Sequential_Transformation_input_2.txt",sep = "\t")
+colnames(df_yh) <- paste0("HYH",c("Function","Number","Coverage"))
+df_w <- read.table("W_Sequential_Transformation_input_2.txt",sep = "\t")
+colnames(df_w) <- paste0("TW",c("Function","Number","Coverage"))
+df_d <- read.table("D_Sequential_Transformation_input_2.txt",sep = "\t")
+colnames(df_d) <- paste0("TD",c("Function","Number","Coverage"))
+match(df_cs$HCSFunction,df_yh$HYHFunction)
+df_organic <- cbind(df_w[c(1,3)],df_d[c(1,3)],df_cs[c(1,3)],df_yh[c(1,3)])
+rownames(df_organic) <- df_organic$TWFunction
+df_organic <- df_organic[-c(1,3,5,7)]
+df_organic <- df_organic[rowSums(df_organic) != 0,]
+###c\n\p\s
+df1 <- read.table("CS_Total.R_input.txt",sep = "\t")
+df2 <- read.table("YH_Total.R_input.txt",sep = "\t")
+df3 <- read.table("W_Total.R_input.txt",sep = "\t")
+df4 <- read.table("D_Total.R_input.txt",sep = "\t")
+df_all <- cbind(df3,df4,df1,df2)
+rownames(df_all) <- df_all$V1
+df_all <- df_all[-c(1,2,4,5,7,8,10,11)]
+colnames(df_all) <- c("TW","TD","HCS","HYH")
+df_all <- df_all[rowSums(df_all) != 0,]
+rownames(df_all) <- gsub("\\w\\-\\w\\-\\d\\d:","",rownames(df_all))
+df_all$Function <- rownames(df_all)
+
+df_visual <- reshape2::melt(df_all)
+colnames(df_visual)[2] <- "Type"
+mycolor <- brewer.pal(12, "Paired")[1:10]
+ggplot(df_visual,aes(Function,value,fill = Type))+
+  geom_bar(stat="identity",position=position_dodge2(0.9))+
+  theme_bw()+
+  scale_fill_manual(values = mycolor)+
+  theme(axis.title = element_blank())+
+  coord_flip()+
+  scale_y_continuous(expand = c(0,0),limits = c(0,1.05))
+ggsave("Bin_coverage_metabolic.pdf",height = 10,width = 6) 
+
+
+##########sankey
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\unigene_bins_nmds")
+df_w <- read.table("W_Metabolic_Sankey_diagram_input.txt",sep = "\t")
+df_w$Sample <- rep("TW",nrow(df_w))
+df_d <- read.table("D_Metabolic_Sankey_diagram_input.txt",sep = "\t")
+df_d$Sample <- rep("TD",nrow(df_d))
+df_cs <- read.table("CS_Metabolic_Sankey_diagram_input.txt",sep = "\t")
+df_cs$Sample <- rep("HCS",nrow(df_cs))
+df_yh <- read.table("YH_Metabolic_Sankey_diagram_input.txt",sep = "\t")
+df_yh$Sample <- rep("HYH",nrow(df_yh))
+df_all <- rbind(df_w,df_d,df_cs,df_yh)
+colnames(df_all) <- c("Phylum","Function","Value","Sample")
+df_all$Category <- ifelse(grepl("C-S", df_all$Function), "Carbon",
+                               ifelse(grepl("N-S", df_all$Function), "Nitrogen",
+                                      ifelse(grepl("S-S", df_all$Function), "Sulfur",
+                                             ifelse(grepl("O-S", df_all$Function), "Others",""))))
+unique(df_all$Function)
+# library(tidyverse)
+# library(ggsankey)
+library(ggplot2)
+# library(ggalluvial)
+library(ggforce)
+library(RColorBrewer)
+mycolor <- brewer.pal(12, "Paired")[1:10]
+c("#A6CEE3","#1F78B4","#B2DF8A","#33A02C","#FB9A99","#E31A1C","#FDBF6F","#FF7F00","#CAB2D6","#6A3D9A")
+# ggplot(df_all,aes(axis1 = Sample,axis2 = Phylum,axis3 = Function,axis4 = Category,y = Value))+
+#   geom_alluvium(aes(fill = Phylum),width = 1/12,knot.pos = 1/3)+
+#   geom_stratum(width = 1/12, fill = "white", color = "grey")+
+#   geom_text(stat = "stratum", aes(label = after_stat(stratum)))+#geom_label()
+#   theme_bw()+
+#   theme(panel.grid = element_blank(),
+#         panel.border = element_blank(),
+#         axis.title = element_blank(),
+#         axis.text = element_blank(),
+#         axis.ticks = element_blank())+
+#   scale_fill_manual(values = mycolor)
+
+colnames(df_all)
+df_all$Function <- gsub("\\w\\-\\w\\-\\d\\d:","",df_all$Function)
+df_all <- df_all[c(4,1,2,5,3)]
+data <- gather_set_data(df_all, 1:4)
+
+head(data)#变换之后的数据
+data$y <- factor(data$y,levels = c("TW","TD","HCS","HYH",unique(data$Phylum),
+                                   unique(data$Function),unique(data$Category)))
+unique(data$y)
+ggplot(data, aes(x, id=id ,split = y, value = Value)) +
+  geom_parallel_sets(aes(fill = Phylum), alpha = 0.5, axis.width = 0.04,
+                     sep = 0.05,inherit.aes = T) + #根据Drug列（第二列）上色
+  geom_parallel_sets_axes(axis.width = 0.1,fill = "gray",color="black",sep = 0.05,
+                          position = "identity") + #调整类别为白色方块，边框为黑色
+  geom_parallel_sets_labels(colour = 'black',angle = 0,aes(size=1),sep = 0.05) + #设置字体的颜色、角度和大小
+  theme_bw()+  #删除灰色背景
+  theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank(),panel.border = element_blank())+ #删除坐标轴和网格线
+  theme(axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank())+ #删除横纵坐标 
+  guides(size = "none")+
+  scale_fill_manual(values = mycolor[c(8,6,4,2)])
+ggsave("Sankey_new.pdf",height = 8,width = 10)
