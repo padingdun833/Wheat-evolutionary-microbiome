@@ -1,0 +1,140 @@
+setwd("D:\\Personal_profiles\\bioinformatics\\R\\binings\\tree")
+df_complete <- read.delim("results.tsv")
+sum(df_complete$Marker.lineage == "k__Archaea (UID2)")
+df_complete2 <- df_complete[df_complete$Completeness > 75 & 
+                              df_complete$Contamination < 5 ,]
+win_bin_name <- read.delim("wining_bin_name.txt",header = F)
+colnames(win_bin_name) <- "Bin_name"
+sum(df_complete2$Bin.Id %in% win_bin_name$Bin_name)
+df_win_bin_complete <- df_complete[df_complete$Bin.Id %in% win_bin_name$Bin_name,]
+# write.table(df_win_bin_complete[-c(1:6),c(1,2)],"win_bin_name_taxanomy.txt",row.names = F)
+df_quant <- read.delim("all_quant_bins.txt",header = F)
+df_quant1 <- df_quant[df_quant$V1 != "Genomic bins",]
+Sample <- rep(df_quant$V2[df_quant$V1 == "Genomic bins"],each = 29)
+colnames(df_quant1) <- c("Bin_name","Value")
+df_quant1$Value <- as.numeric(df_quant1$Value)
+df_quant2 <- cbind(df_quant1,Sample)
+library(reshape2)
+df_quant3 <- dcast(df_quant2,Bin_name~Sample,value.var = "Value")
+which(is.nan(df_quant3$W1_2))##产生NAN
+colnames(df_quant3) <- gsub("Z","D",colnames(df_quant3))
+df_quant3 <- df_quant3[-c(1:6),-c(2:7)]
+
+library(treeio)
+tree <- read.newick("Bin.unrooted.trees")#phylo对象
+##修剪树枝
+df_win_bin_complete$Bin.Id <- gsub(".fa","",df_win_bin_complete$Bin.Id)
+to_drop <- df_win_bin_complete$Bin.Id[2:6]
+tree_reduced <- drop.tip(tree,to_drop)
+trees4 <- as.treedata(tree)#treedata对象
+library(tidytree)
+x <- as_tibble(tree_reduced)#tbl_tree对象，其实就是data.frame
+df_x <- left_join(x,df_quant3,by = c("label" = "Bin_name"))
+df_x1 <- left_join(df_x,df_win_bin_complete[-1,],by = c("label" = "Bin.Id"))
+
+##分类信息
+df_taxon <- read.delim("gtdbtk.bac120.summary1.tsv")
+df_x2 <- left_join(df_x1,df_taxon,by = c("label" = "user_genome"))
+#使用within函数对completeness变量进行分组
+df_x3 <- within(df_x2,{
+  Group <- NA
+  Group[Completeness>=90]="First"
+  Group[Completeness>= 80 & Completeness < 90] = "Second"
+  Group[Completeness < 80] = "Third"
+})
+df_x3$label <- gsub("Z","D",df_x3$label)
+sum(stringr::str_count(df_x3$Marker.lineage[1:23],"k__"))#6
+sum(stringr::str_count(df_x3$Marker.lineage[1:23],"p__"))#3
+sum(stringr::str_count(df_x3$Marker.lineage[1:23],"o__"))#5
+sum(stringr::str_count(df_x3$Marker.lineage[1:23],"f__"))#7
+sum(stringr::str_count(df_x3$Marker.lineage[1:23],"g__"))#2
+y <- as.treedata(df_x3)
+library(ggtree)
+library(ggplot2)
+
+library(tidyverse)
+mycounts <- df_x3[1:23,c("label","D1_1","D1_2","D1_3","D2_1","D2_2","D2_3","D3_1","D3_2","D3_3",
+"YL_YH_1","YL_YH_2","YL_YH_3")]
+mycounts <- column_to_rownames(mycounts,var = "label")
+condition <- factor(c(rep("D", 9), rep("YL_YH", 3)), levels = c("YL_YH","D"))
+df_des <- data.frame(as.data.frame(t(mycounts)),type = condition)
+
+#生成一个空向量来存放计算出的p值
+pval=c()
+#for循环16次计算每个基因的p值
+for(gene in colnames(df_des)[-length(df_des)]){
+  #根据type来将样本分成两组
+  p=t.test(df_des[,gene]~df_des$type)$p.value
+  #存放p值
+  pval=c(pval,p)
+}
+#输出p值(在驯化和改良没有基因差异，D1表达量过低)
+pval
+#计算log2FC
+rownames(df_quant3) <- gsub("Z","D",df_quant3$Bin_name)
+df_quant3 <- df_quant3[-1]
+df_quant3_t <- as.data.frame(t(df_quant3))
+df_quant3_t_all <- data.frame(df_quant3_t,Group = rep(c("W","W","W",
+                                                        "YL_CS","YL_YH","D","D","D"),each = 3))
+df_group <- aggregate(df_quant3_t,by = list(Group = df_quant3_t_all$Group),mean,na.rm = T)
+df_group <- column_to_rownames(df_group,var = "Group")
+df_group_t <- as.data.frame(t(df_group))
+df_group_t$Group <- rownames(df_group_t)
+df_x4 <- df_x3[1:23,]
+df_x5 <- left_join(df_x4,df_group_t,by = c("label" = "Group"))
+
+df_logFC <- data.frame(Bin_name = rownames(df_group_t),log2FC = 
+                         log2(df_group_t$D / df_group_t$W))
+df_p_value <- data.frame(Bin_name = colnames(df_des)[-length(df_des)],pval = 
+                           pval)
+
+df_logfc_p <- left_join(df_logFC,df_p_value,by = "Bin_name")
+df_logfc_p_star <- mutate(df_logfc_p,sig = 
+                            ifelse(pval>0.1,"NS",ifelse(pval>0.05,".",ifelse(pval>0.01,"*",ifelse(pval>0.001,"**","***")))))
+
+df_x5 <- left_join(df_x4,df_logfc_p_star,by = c("label" = "Bin_name"))
+df_tree <- df_x5[,c(4,43,49:52)]
+rownames(df_tree) <- df_tree$label
+
+##修改后多序列比对文件
+msa1 <- "gtdbtk.bac120.user_msa_1_NOSQ.fasta"
+p <- ggtree(y,aes(color = Phylum),layout = "roundrect",show.legend = F) + geom_tiplab(offset = 0.14,size = 6,align = T,aes(color = Phylum)
+                                                                                      ,show.legend = F)
+library(Biostrings)
+library(ggmsa)
+msa2 <- readAAStringSet(msa1)
+names(msa2) <- gsub("Z","D",names(msa2))
+data = tidy_msa(msa2, 1090, 1140)
+data2 = tidy_msa(msa2, 1260, 1310)
+p3 <- p + geom_facet(geom = geom_msa, data = data,  panel = 'Msa1090_1140',
+                     font = NULL, color = "Chemistry_AA",) +
+  geom_facet(geom = geom_msa, data = data2,  panel = 'Msa1260_1310',
+             font = NULL, color = "Chemistry_AA") +
+  xlim_tree(2.1)+
+  geom_tippoint(
+    mapping = aes(
+      shape = Group,
+      color = Phylum,
+      size = Contamination
+    )
+  ) +
+  theme_tree2()
+ggsave("tree_nosq_2.pdf",width = 15,height = 10)
+library(ggnewscale)
+p3 + new_scale_fill() +
+  geom_facet(panel = "Log2 Enrichment",data = df_tree[,-2],geom = geom_col,
+             #geom_facet中出现的映射变量不能和ggtree中的变量名冲突
+             aes(x = log2FC,color = Phylum,fill = Phylum),
+             orientation = "y",width = .6)+
+  guides(color = "none") 
+# ggsave("tree_nosq_pval_1.pdf",width = 25,height = 15)
+##由于不方便添加显著性标记，另一种可视化方法
+p6 <- ggplot(df_tree,aes(label,log2FC))+
+  geom_col(aes(fill = Phylum))+
+  geom_text(aes(label = sig,y = 1.2*log2FC),size = 6)+
+  coord_flip()+theme_tree2() 
+# theme(legend.position = "none") 
+library(aplot) 
+p7 <- p3 + guides(color = "none")
+p6 %>% insert_left(p7,width = 4) 
+ggsave("tree_nosq_pval_2.pdf",width = 25,height = 15)
